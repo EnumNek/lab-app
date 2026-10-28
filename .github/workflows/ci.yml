@@ -1,0 +1,45 @@
+# Название пайплайна на вкладке Actions
+name: CI
+
+# Запуск: при каждом push и вручную кнопкой Run workflow
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    name: Тесты и сборка
+    runs-on: ubuntu-latest   # временная машина GitHub с Ubuntu
+    env:
+      # Секреты репозитория (если их нет, публикация пропускается)
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    steps:
+      - name: Получение кода из репозитория
+        uses: actions/checkout@v5
+
+      - name: Установка Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Установка зависимостей
+        run: pip install -r requirements.txt pytest
+
+      - name: Запуск автотестов
+        run: pytest -v
+
+      - name: Сборка Docker-образа
+        run: docker build -t lab-app:ci .
+
+      # Дополнительно: публикация образа в Docker Hub (ветка main)
+      - name: Публикация образа в Docker Hub
+        if: env.DOCKERHUB_TOKEN != '' && github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/lab-app:latest
+        run: |
+          echo "$DOCKERHUB_TOKEN" |
+            docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+          docker tag lab-app:ci "$IMAGE"
+          docker push "$IMAGE"
